@@ -21,38 +21,56 @@ if uploaded_file:
         else:
             return 1  # 중립/긍정
 
-    # 위험도 컬럼 생성
     df["risk_level"] = df["감성점수"].apply(sentiment_to_risk)
 
     # 📊 위험도 분포 시각화
-    st.subheader("📉 위험도 분포")
+    st.subheader("📉 위험도 단계별 게시글 수")
     risk_counts = df["risk_level"].value_counts().sort_index()
-    st.bar_chart(risk_counts.rename({1: "낮음", 2: "중간", 3: "높음"}))
+    labels = ["낮음 (1)", "중간 (2)", "높음 (3)"]
+
+    fig, ax = plt.subplots()
+    bars = ax.bar(labels, risk_counts, color=["blue", "orange", "red"])
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2, height + 1, f"{int(height)}", ha='center', va='bottom')
+    st.pyplot(fig)
+
+    # ⚠️ 가장 위험한 게시글 상위 5개 출력
+    st.subheader("🔥 위험도 높은 게시글 Top 5")
+    top_risk = df.sort_values("감성점수").head(5)
+    for i, row in top_risk.iterrows():
+        st.markdown(
+            f"""
+            **{i+1}. 위험도 {row['risk_level']}단계 / 감성점수 {row['감성점수']}**
+            > {row['내용'][:100]}...
+            """
+        )
 
     # 🌐 지도 시각화
     st.subheader("🗺️ 감성 기반 침수 위험 지도")
     m = folium.Map(location=[37.4979, 127.0276], zoom_start=13)
 
     for _, row in df.dropna(subset=["위도", "경도"]).iterrows():
+        risk = row["risk_level"]
         popup_text = (
             f"<b>📍 위치:</b> {row.get('place_name', '정보 없음')}<br>"
-            f"<b>⚠️ 위험도:</b> {row['risk_level']}단계<br>"
+            f"<b>⚠️ 위험도:</b> {risk}단계<br>"
             f"<b>🧠 감성:</b> {row['감성분류']}<br>"
             f"<b>📝 내용:</b> {row['내용'][:100]}"
         )
         folium.CircleMarker(
             location=[row["위도"], row["경도"]],
-            radius=6,
-            color="red" if row["risk_level"] == 3 else "orange" if row["risk_level"] == 2 else "blue",
+            radius=8 if risk == 3 else 6 if risk == 2 else 5,
+            color="red" if risk == 3 else "orange" if risk == 2 else "blue",
             fill=True,
-            fill_opacity=0.6,
+            fill_opacity=0.7,
             popup=folium.Popup(popup_text, max_width=300)
         ).add_to(m)
 
     st_data = st_folium(m, width=1200, height=600)
 
-    # 🧾 테이블 보기
-    st.subheader("📄 업로드된 데이터 미리 보기")
+    # 📄 테이블 미리보기
+    st.subheader("📋 데이터 미리 보기")
     st.dataframe(df[["내용", "감성분류", "감성점수", "risk_level"]].head(10))
 else:
-    st.info("분석된 엑셀 파일을 업로드하세요.")
+    st.info("감성 분석된 엑셀 파일을 업로드하세요.")
